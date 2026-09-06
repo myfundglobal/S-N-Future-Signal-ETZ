@@ -6,8 +6,8 @@ from telebot import types
 import yfinance as yf
 import pandas as pd
 
-# Aapka Telegram Token
-TOKEN = "8959002705:AAHeJRhXkBCQl_hIYd0ehD4BVYURZCNsyHg"
+# Aapka Naya Telegram Token
+TOKEN = "8792943982:AAF7hNy8KjZmTeHTgUY4BMgq3qL3ejIaVLA"
 bot = telebot.TeleBot(TOKEN)
 
 def get_signal_for_asset(symbol, display_name):
