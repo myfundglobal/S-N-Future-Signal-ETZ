@@ -6,7 +6,7 @@ from telebot import types
 import yfinance as yf
 import pandas as pd
 
-# Aapka Naya Telegram Token
+# Token me koi space nahi hona chahiye (bilkul exact yeh likhein)
 TOKEN = "8792943982:AAF7hNy8KjZmTeHTgUY4BMgq3qL3ejIaVLA"
 bot = telebot.TeleBot(TOKEN)
 
