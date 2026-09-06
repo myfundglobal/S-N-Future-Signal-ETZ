@@ -19,7 +19,7 @@ def get_signal_for_asset(symbol, display_name):
         
         current_price = float(df['Close'].iloc[-1])
         
-        # S&R Calculation using Rolling Window (Swing Highs & Lows)
+        # S&R Calculation using Rolling Window
         df['Support'] = df['Low'].rolling(window=5, center=True).min()
         df['Resistance'] = df['High'].rolling(window=5, center=True).max()
         
@@ -32,7 +32,7 @@ def get_signal_for_asset(symbol, display_name):
         open_time = now_ist.strftime("%H:%M:%S")
         expiry_time = (now_ist + timedelta(minutes=1)).strftime("%H:%M:%S")
         
-        # Signal Logic based on distance from S&R
+        # Signal Logic
         if abs(current_price - support) < abs(current_price - resistance):
             signal_type = "🟢 CALL (UP) [Support Bounce]"
             level = support
@@ -56,7 +56,7 @@ def get_signal_for_asset(symbol, display_name):
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    """Jab user /start likhega toh buttons show honge"""
+    """Jab user /start likhega toh seedha buttons show honge"""
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn1 = types.InlineKeyboardButton("🌐 Real Market (EUR/USD, GBP/USD)", callback_data="real_market")
     btn2 = types.InlineKeyboardButton("🪙 Crypto Market (BTC/USD, ETH/USD)", callback_data="crypto_market")
@@ -66,7 +66,7 @@ def send_welcome(message):
     bot.send_message(
         message.chat.id,
         "🤖 **Welcome to Pro S&R Trading Bot!**\n\n"
-        "Neeche diye gaye options me se apna market select karein taaki main turant strong Support & Resistance levels calculate karke signal doon:",
+        "Neeche diye gaye options me se apna market select karein:",
         reply_markup=markup,
         parse_mode="Markdown"
     )
