@@ -1,30 +1,32 @@
 import time
+from datetime import datetime, timedelta
+import pytz
 import telebot
 import yfinance as yf
 import pandas as pd
 
-# Aapke credentials direct configured hain
+# Telegram Credentials
 TOKEN = "8959002705:AAHeJRhXkBCQl_hIYd0ehD4BVYURZCNsyHg"
 CHAT_ID = "1375185299"
 
 bot = telebot.TeleBot(TOKEN)
 
-# Aap yahan apna pasandida asset symbol dal sakte hain (jaise BTC-USD, EURUSD=X)
-SYMBOL = "BTC-USD"  
-INTERVAL = "1h"
-PERIOD = "5d"
+# Quotex ke popular pairs (Yahoo Finance format: EURUSD=X, GBPUSD=X)
+PAIRS = ["EURUSD=X", "GBPUSD=X", "AUDUSD=X"]
+INTERVAL = "1m"
+PERIOD = "1d"
 
-def fetch_data():
+def fetch_data(symbol):
     """Market data download karne ke liye function"""
     try:
-        df = yf.download(SYMBOL, period=PERIOD, interval=INTERVAL, progress=False)
+        df = yf.download(symbol, period=PERIOD, interval=INTERVAL, progress=False)
         return df
     except Exception as e:
-        print(f"Error fetching data: {e}")
+        print(f"Error fetching data for {symbol}: {e}")
         return None
 
 def find_support_resistance(df, window=5):
-    """Rolling window ka use karke Support aur Resistance levels nikalna"""
+    """Support aur Resistance levels calculate karna"""
     df['Support'] = df['Low'].rolling(window=window, center=True).min()
     df['Resistance'] = df['High'].rolling(window=window, center=True).max()
     
@@ -36,53 +38,71 @@ def find_support_resistance(df, window=5):
         return None, None
 
 def check_market_and_send():
-    print("Checking market levels...")
-    df = fetch_data()
-    if df is None or df.empty:
-        return
+    print("Scanning Quotex markets for 1-min signals...")
+    
+    # India Standard Time (IST) zone setup
+    ist = pytz.timezone('Asia/Kolkata')
+    current_time_ist = datetime.now(ist)
+    
+    open_time_str = current_time_ist.strftime("%H:%M:%S")
+    # 1 minute expiry time
+    expiry_time_str = (current_time_ist + timedelta(minutes=1)).strftime("%H:%M:%S")
 
-    current_price = float(df['Close'].iloc[-1])
-    support, resistance = find_support_resistance(df)
+    for symbol in PAIRS:
+        df = fetch_data(symbol)
+        if df is None or df.empty or len(df) < 10:
+            continue
 
-    if support is None or resistance is None:
-        return
+        current_price = float(df['Close'].iloc[-1])
+        support, resistance = find_support_resistance(df)
 
-    print(f"Price: {current_price} | Support: {support:.2f} | Resistance: {resistance:.2f}")
+        if support is None or resistance is None:
+            continue
 
-    message = ""
-    # Agar price Support ya Resistance ke 0.3% ke andar hai, toh signal generate karein
-    if abs(current_price - support) / current_price < 0.003:
-        message = (f"🟢 *BUY / CALL SIGNAL*\n\n"
-                   f"📊 Asset: `{SYMBOL}`\n"
-                   f"💰 Current Price: `{current_price:.2f}`\n"
-                   f"🛡️ Support Level: `{support:.2f}`\n"
-                   f"✨ Status: Price is testing Support zone!")
-                   
-    elif abs(current_price - resistance) / current_price < 0.003:
-        message = (f"🔴 *SELL / PUT SIGNAL*\n\n"
-                   f"📊 Asset: `{SYMBOL}`\n"
-                   f"💰 Current Price: `{current_price:.2f}`\n"
-                   f"⚡ Resistance Level: `{resistance:.2f}`\n"
-                   f"✨ Status: Price is testing Resistance zone!")
+        # Clean symbol name for display (e.g., EURUSD=X -> EUR/USD)
+        display_pair = symbol.replace("=X", "").replace("-", "/")
 
-    # Agar signal mila hai, toh message bhej do
-    if message:
-        try:
-            bot.send_message(CHAT_ID, message, parse_mode="Markdown")
-            print("Signal successfully sent to Telegram!")
-        except Exception as e:
-            print(f"Failed to send telegram message: {e}")
+        message = ""
+        # Support ke paas -> CALL (UP) Signal
+        if abs(current_price - support) / current_price < 0.0008:
+            message = (f"🎯 *QUOTEX 1-MIN SIGNAL* 🎯\n\n"
+                       f"📊 Pair: `{display_pair}`\n"
+                       f"📈 Direction: 🟢 **CALL (UP)**\n"
+                       f"⏰ Open Time: `{open_time_str} IST`\n"
+                       f"⏳ Expiry Time: `{expiry_time_str} IST` (1 Min)\n"
+                       f"💰 Entry Price: `{current_price:.5f}`\n"
+                       f"🛡️ Support Level: `{support:.5f}`")
+                       
+        # Resistance ke paas -> PUT (DOWN) Signal
+        elif abs(current_price - resistance) / current_price < 0.0008:
+            message = (f"🎯 *QUOTEX 1-MIN SIGNAL* 🎯\n\n"
+                       f"📊 Pair: `{display_pair}`\n"
+                       f"📉 Direction: 🔴 **PUT (DOWN)**\n"
+                       f"⏰ Open Time: `{open_time_str} IST`\n"
+                       f"⏳ Expiry Time: `{expiry_time_str} IST` (1 Min)\n"
+                       f"💰 Entry Price: `{current_price:.5f}`\n"
+                       f"⚡ Resistance Level: `{resistance:.5f}`")
+
+        # Agar signal generate hua hai, toh Telegram par bhej do
+        if message:
+            try:
+                bot.send_message(CHAT_ID, message, parse_mode="Markdown")
+                print(f"Signal sent for {display_pair}!")
+            except Exception as e:
+                print(f"Failed to send telegram message: {e}")
+            
+            # Ek baar me ek hi signal bhejne ke liye break kar sakte hain ya saare check kar sakte hain
+            break
 
 if __name__ == "__main__":
-    print("Trading bot started and running as background worker...")
+    print("Quotex 1-Min S&R Bot started...")
     
     try:
-        bot.send_message(CHAT_ID, "🚀 S&R Trading Bot successfully live ho gaya hai!")
+        bot.send_message(CHAT_ID, "🚀 Quotex 1-Min Signal Bot live ho gaya hai!")
     except Exception as e:
         print(f"Startup message error: {e}")
 
-    # Render background worker ke liye continuous loop
+    # Render background worker ke liye continuous loop (har 60 seconds me check karega)
     while True:
         check_market_and_send()
-        # Har 15 minutes (900 seconds) me market dobara check karega
-        time.sleep(900)
+        time.sleep(60)
