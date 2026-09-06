@@ -6,7 +6,7 @@ from telebot import types
 import yfinance as yf
 import pandas as pd
 
-# Token me koi space nahi hona chahiye (bilkul exact yeh likhein)
+# Aapka Telegram Token
 TOKEN = "8792943982:AAF7hNy8KjZmTeHTgUY4BMgq3qL3ejIaVLA"
 bot = telebot.TeleBot(TOKEN)
 
@@ -17,12 +17,16 @@ def get_signal_for_asset(symbol, display_name):
         if df.empty or len(df) < 10:
             return f"❌ Data filhal available nahi hai {display_name} ke liye."
         
-        current_price = float(df['Close'].iloc[-1])
-        
+        # Handle multi-index columns if returned by yfinance
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
         # S&R Calculation using Rolling Window
         df['Support'] = df['Low'].rolling(window=5, center=True).min()
         df['Resistance'] = df['High'].rolling(window=5, center=True).max()
         
+        # Extract scalar values safely
+        current_price = float(df['Close'].dropna().iloc[-1])
         support = float(df['Support'].dropna().iloc[-1])
         resistance = float(df['Resistance'].dropna().iloc[-1])
         
