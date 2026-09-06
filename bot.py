@@ -52,6 +52,7 @@ def get_signal_for_asset(symbol, display_name):
             f"⏳ **Expiry Time:** `{expiry_time} IST` (1 Min)\n"
             f"💰 **Entry Price:** `{current_price:.5f}`\n"
             f"🛡️ **Key Level:** `{level:.5f}`\n\n"
+            f"⚡ *Updated at: {open_time}*\n"
             f"⚠️ *Note: Trade with proper risk management.*"
         )
         return msg
@@ -93,13 +94,17 @@ def callback_query(call):
     back_btn = types.InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_menu")
     markup.add(back_btn)
     
-    bot.edit_message_text(
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        text=response,
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    # Try-except block to handle "message is not modified" error safely
+    try:
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text=response,
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Edit message ignored: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_menu")
 def back_to_menu(call):
@@ -110,13 +115,16 @@ def back_to_menu(call):
     btn3 = types.InlineKeyboardButton("🔄 OTC Market (Quotex OTC Simulated)", callback_data="otc_market")
     markup.add(btn1, btn2, btn3)
     
-    bot.edit_message_text(
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id,
-        text="🤖 **Main Menu:** Market select karein:",
-        reply_markup=markup,
-        parse_mode="Markdown"
-    )
+    try:
+        bot.edit_message_text(
+            chat_id=call.message.chat.id,
+            message_id=call.message.message_id,
+            text="🤖 **Main Menu:** Market select karein:",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"Menu edit ignored: {e}")
 
 if __name__ == "__main__":
     print("Interactive Telegram Bot is up and running...")
