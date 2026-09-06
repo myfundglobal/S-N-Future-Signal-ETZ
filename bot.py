@@ -2,107 +2,118 @@ import time
 from datetime import datetime, timedelta
 import pytz
 import telebot
+from telebot import types
 import yfinance as yf
 import pandas as pd
 
-# Telegram Credentials
+# Aapka Telegram Token
 TOKEN = "8959002705:AAHeJRhXkBCQl_hIYd0ehD4BVYURZCNsyHg"
-CHAT_ID = "1375185299"
-
 bot = telebot.TeleBot(TOKEN)
 
-# Quotex ke popular pairs (Yahoo Finance format: EURUSD=X, GBPUSD=X)
-PAIRS = ["EURUSD=X", "GBPUSD=X", "AUDUSD=X"]
-INTERVAL = "1m"
-PERIOD = "1d"
-
-def fetch_data(symbol):
-    """Market data download karne ke liye function"""
+def get_signal_for_asset(symbol, display_name):
+    """Market data fetch karke Support & Resistance ke basis par 1-min signal nikalna"""
     try:
-        df = yf.download(symbol, period=PERIOD, interval=INTERVAL, progress=False)
-        return df
-    except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
-        return None
-
-def find_support_resistance(df, window=5):
-    """Support aur Resistance levels calculate karna"""
-    df['Support'] = df['Low'].rolling(window=window, center=True).min()
-    df['Resistance'] = df['High'].rolling(window=window, center=True).max()
-    
-    try:
-        support_level = df['Support'].dropna().iloc[-1]
-        resistance_level = df['Resistance'].dropna().iloc[-1]
-        return float(support_level), float(resistance_level)
-    except Exception:
-        return None, None
-
-def check_market_and_send():
-    print("Scanning Quotex markets for 1-min signals...")
-    
-    # India Standard Time (IST) zone setup
-    ist = pytz.timezone('Asia/Kolkata')
-    current_time_ist = datetime.now(ist)
-    
-    open_time_str = current_time_ist.strftime("%H:%M:%S")
-    # 1 minute expiry time
-    expiry_time_str = (current_time_ist + timedelta(minutes=1)).strftime("%H:%M:%S")
-
-    for symbol in PAIRS:
-        df = fetch_data(symbol)
-        if df is None or df.empty or len(df) < 10:
-            continue
-
+        df = yf.download(symbol, period="1d", interval="1m", progress=False)
+        if df.empty or len(df) < 10:
+            return f"❌ Data filhal available nahi hai {display_name} ke liye."
+        
         current_price = float(df['Close'].iloc[-1])
-        support, resistance = find_support_resistance(df)
+        
+        # S&R Calculation using Rolling Window (Swing Highs & Lows)
+        df['Support'] = df['Low'].rolling(window=5, center=True).min()
+        df['Resistance'] = df['High'].rolling(window=5, center=True).max()
+        
+        support = float(df['Support'].dropna().iloc[-1])
+        resistance = float(df['Resistance'].dropna().iloc[-1])
+        
+        # IST Timezone setup
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = datetime.now(ist)
+        open_time = now_ist.strftime("%H:%M:%S")
+        expiry_time = (now_ist + timedelta(minutes=1)).strftime("%H:%M:%S")
+        
+        # Signal Logic based on distance from S&R
+        if abs(current_price - support) < abs(current_price - resistance):
+            signal_type = "🟢 CALL (UP) [Support Bounce]"
+            level = support
+        else:
+            signal_type = "🔴 PUT (DOWN) [Resistance Rejection]"
+            level = resistance
 
-        if support is None or resistance is None:
-            continue
+        msg = (
+            f"🎯 **QUOTEX 1-MIN SIGNAL** 🎯\n\n"
+            f"📊 **Asset:** `{display_name}`\n"
+            f"📈 **Direction:** {signal_type}\n"
+            f"⏰ **Open Time:** `{open_time} IST`\n"
+            f"⏳ **Expiry Time:** `{expiry_time} IST` (1 Min)\n"
+            f"💰 **Entry Price:** `{current_price:.5f}`\n"
+            f"🛡️ **Key Level:** `{level:.5f}`\n\n"
+            f"⚠️ *Note: Trade with proper risk management.*"
+        )
+        return msg
+    except Exception as e:
+        return f"⚠️ Market analyze karne me error aayi: {str(e)}"
 
-        # Clean symbol name for display (e.g., EURUSD=X -> EUR/USD)
-        display_pair = symbol.replace("=X", "").replace("-", "/")
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    """Jab user /start likhega toh buttons show honge"""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn1 = types.InlineKeyboardButton("🌐 Real Market (EUR/USD, GBP/USD)", callback_data="real_market")
+    btn2 = types.InlineKeyboardButton("🪙 Crypto Market (BTC/USD, ETH/USD)", callback_data="crypto_market")
+    btn3 = types.InlineKeyboardButton("🔄 OTC Market (Quotex OTC Simulated)", callback_data="otc_market")
+    markup.add(btn1, btn2, btn3)
+    
+    bot.send_message(
+        message.chat.id,
+        "🤖 **Welcome to Pro S&R Trading Bot!**\n\n"
+        "Neeche diye gaye options me se apna market select karein taaki main turant strong Support & Resistance levels calculate karke signal doon:",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
 
-        message = ""
-        # Support ke paas -> CALL (UP) Signal
-        if abs(current_price - support) / current_price < 0.0008:
-            message = (f"🎯 *QUOTEX 1-MIN SIGNAL* 🎯\n\n"
-                       f"📊 Pair: `{display_pair}`\n"
-                       f"📈 Direction: 🟢 **CALL (UP)**\n"
-                       f"⏰ Open Time: `{open_time_str} IST`\n"
-                       f"⏳ Expiry Time: `{expiry_time_str} IST` (1 Min)\n"
-                       f"💰 Entry Price: `{current_price:.5f}`\n"
-                       f"🛡️ Support Level: `{support:.5f}`")
-                       
-        # Resistance ke paas -> PUT (DOWN) Signal
-        elif abs(current_price - resistance) / current_price < 0.0008:
-            message = (f"🎯 *QUOTEX 1-MIN SIGNAL* 🎯\n\n"
-                       f"📊 Pair: `{display_pair}`\n"
-                       f"📉 Direction: 🔴 **PUT (DOWN)**\n"
-                       f"⏰ Open Time: `{open_time_str} IST`\n"
-                       f"⏳ Expiry Time: `{expiry_time_str} IST` (1 Min)\n"
-                       f"💰 Entry Price: `{current_price:.5f}`\n"
-                       f"⚡ Resistance Level: `{resistance:.5f}`")
+@bot.callback_query_handler(func=lambda call: True)
+def callback_query(call):
+    """Button click hone par signal generate karna"""
+    bot.answer_callback_query(call.id, "Analyzing market levels...")
+    
+    if call.data == "real_market":
+        response = get_signal_for_asset("EURUSD=X", "EUR/USD (Real Market)")
+    elif call.data == "crypto_market":
+        response = get_signal_for_asset("BTC-USD", "BTC/USD (Crypto)")
+    elif call.data == "otc_market":
+        response = get_signal_for_asset("GBPUSD=X", "EUR/USD OTC (Quotex Style)")
+    else:
+        response = "Invalid selection."
+        
+    markup = types.InlineKeyboardMarkup()
+    back_btn = types.InlineKeyboardButton("🔙 Back to Main Menu", callback_data="back_to_menu")
+    markup.add(back_btn)
+    
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=response,
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
 
-        # Agar signal generate hua hai, toh Telegram par bhej do
-        if message:
-            try:
-                bot.send_message(CHAT_ID, message, parse_mode="Markdown")
-                print(f"Signal sent for {display_pair}!")
-            except Exception as e:
-                print(f"Failed to send telegram message: {e}")
-            
-            # Ek baar me ek hi signal bhejne ke liye break kar sakte hain ya saare check kar sakte hain
-            break
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_menu")
+def back_to_menu(call):
+    """Wapas main menu par jaane ke liye"""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn1 = types.InlineKeyboardButton("🌐 Real Market (EUR/USD, GBP/USD)", callback_data="real_market")
+    btn2 = types.InlineKeyboardButton("🪙 Crypto Market (BTC/USD, ETH/USD)", callback_data="crypto_market")
+    btn3 = types.InlineKeyboardButton("🔄 OTC Market (Quotex OTC Simulated)", callback_data="otc_market")
+    markup.add(btn1, btn2, btn3)
+    
+    bot.edit_message_text(
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text="🤖 **Main Menu:** Market select karein:",
+        reply_markup=markup,
+        parse_mode="Markdown"
+    )
 
 if __name__ == "__main__":
-    print("Quotex 1-Min S&R Bot started...")
-    
-    try:
-        bot.send_message(CHAT_ID, "🚀 Quotex 1-Min Signal Bot live ho gaya hai!")
-    except Exception as e:
-        print(f"Startup message error: {e}")
-
-    # Render background worker ke liye continuous loop (har 60 seconds me check karega)
-    while True:
-        check_market_and_send()
-        time.sleep(60)
+    print("Interactive Telegram Bot is up and running...")
+    bot.infinity_polling()
