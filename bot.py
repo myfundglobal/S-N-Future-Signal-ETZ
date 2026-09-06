@@ -1,16 +1,15 @@
-import os
 import time
 import telebot
 import yfinance as yf
 import pandas as pd
 
-# Environment variables se credentials lena (Render par secure rehta hai)
-TOKEN = os.environ.get('BOT_TOKEN')
-CHAT_ID = os.environ.get('CHAT_ID') # Telegram Chat ID ya Channel ID jahan signal bhejna hai
+# Aapke credentials direct configured hain
+TOKEN = "8959002705:AAHeJRhXkBCQl_hIYd0ehD4BVYURZCNsyHg"
+CHAT_ID = "1375185299"
 
 bot = telebot.TeleBot(TOKEN)
 
-# Aap yahan apna pasandida asset symbol dal sakte hain (jaise BTC-USD, EURUSD=X, RELIANCE.NS)
+# Aap yahan apna pasandida asset symbol dal sakte hain (jaise BTC-USD, EURUSD=X)
 SYMBOL = "BTC-USD"  
 INTERVAL = "1h"
 PERIOD = "5d"
@@ -66,8 +65,8 @@ def check_market_and_send():
                    f"⚡ Resistance Level: `{resistance:.2f}`\n"
                    f"✨ Status: Price is testing Resistance zone!")
 
-    # Agar signal mila hai aur Chat ID configured hai, toh message bhej do
-    if message and CHAT_ID:
+    # Agar signal mila hai, toh message bhej do
+    if message:
         try:
             bot.send_message(CHAT_ID, message, parse_mode="Markdown")
             print("Signal successfully sent to Telegram!")
@@ -77,11 +76,10 @@ def check_market_and_send():
 if __name__ == "__main__":
     print("Trading bot started and running as background worker...")
     
-    if CHAT_ID and TOKEN:
-        try:
-            bot.send_message(CHAT_ID, "🚀 S&R Trading Bot successfully live ho gaya hai!")
-        except Exception as e:
-            print(f"Startup message error: {e}")
+    try:
+        bot.send_message(CHAT_ID, "🚀 S&R Trading Bot successfully live ho gaya hai!")
+    except Exception as e:
+        print(f"Startup message error: {e}")
 
     # Render background worker ke liye continuous loop
     while True:
